@@ -30,16 +30,30 @@ const isOriginAllowed = (origin) => {
   return false;
 };
 
-app.use(helmet());
-app.use(cors({
-  origin: (origin, callback) => {
-    if (isOriginAllowed(origin)) {
-      callback(null, true);
-    } else {
-      callback(new Error(`CORS blocked for origin: ${origin}`));
+// Robust CORS Middleware: explicitly echo allowed origin and handle preflights
+app.use((req, res, next) => {
+  const origin = req.headers.origin;
+  if (origin) {
+    if (
+      origin.endsWith('.vercel.app') ||
+      origin.includes('localhost') ||
+      origin.includes('127.0.0.1') ||
+      allowedOrigins.includes(origin)
+    ) {
+      res.setHeader('Access-Control-Allow-Origin', origin);
+      res.setHeader('Access-Control-Allow-Credentials', 'true');
+      res.setHeader('Access-Control-Allow-Methods', 'GET, HEAD, PUT, PATCH, POST, DELETE, OPTIONS');
+      res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With');
     }
-  },
-  credentials: true,
+  }
+  if (req.method === 'OPTIONS') {
+    return res.sendStatus(204);
+  }
+  next();
+});
+
+app.use(helmet({
+  crossOriginResourcePolicy: false,
 }));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
