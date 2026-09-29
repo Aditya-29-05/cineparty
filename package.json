@@ -1,0 +1,11 @@
+{
+  "name": "cineparty",
+  "version": "1.0.0",
+  "private": true,
+  "description": "CineParty - Watch party with zero server video upload",
+  "scripts": {
+    "server": "npm run dev --prefix server",
+    "client": "npm run dev --prefix client",
+    "dev": "npm run server"
+  }
+}
