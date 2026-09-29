@@ -131,6 +131,39 @@ export const endRoom = async (req, res, next) => {
   }
 };
 
+// @desc    Toggle host-only controls
+// @route   PATCH /api/rooms/:roomCode/controls
+// @access  Private (Host only)
+export const toggleControls = async (req, res, next) => {
+  try {
+    const { roomCode } = req.params;
+    const { hostOnlyControls } = req.body;
+
+    const { Room } = await import('../models/Room.js');
+    const room = await Room.findOne({ roomCode: roomCode.toUpperCase(), isActive: true });
+
+    if (!room) {
+      return res.status(404).json({ success: false, message: 'Room not found' });
+    }
+    if (room.host.toString() !== req.user._id.toString()) {
+      return res.status(403).json({ success: false, message: 'Only the host can change controls' });
+    }
+
+    room.hostOnlyControls = hostOnlyControls;
+    await room.save();
+
+    // Broadcast the change to all participants in the room via Socket.IO
+    const io = req.app.get('io');
+    if (io) {
+      io.to(roomCode.toUpperCase()).emit('controls_changed', { hostOnlyControls });
+    }
+
+    res.status(200).json({ success: true, hostOnlyControls: room.hostOnlyControls });
+  } catch (error) {
+    next(error);
+  }
+};
+
 // @desc    Get user's active rooms
 // @route   GET /api/rooms
 // @access  Private

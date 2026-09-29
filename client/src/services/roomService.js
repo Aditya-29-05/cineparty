@@ -31,6 +31,11 @@ export const roomService = {
     return response.data;
   },
 
+  async toggleControls(roomCode, hostOnlyControls) {
+    const response = await api.patch(`/rooms/${roomCode}/controls`, { hostOnlyControls });
+    return response.data;
+  },
+
   async getUserRooms() {
     const response = await api.get('/rooms');
     return response.data;

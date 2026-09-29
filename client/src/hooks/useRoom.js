@@ -62,8 +62,10 @@ export function useRoom(roomCode) {
     };
   }, [socket, navigate]);
 
+  const currentUserId = user?.id || user?._id;
+  const roomHostId = room?.host?._id || room?.host;
   const isHost = Boolean(
-    user && room && (room.host?._id === user.id || room.host === user.id)
+    currentUserId && roomHostId && String(roomHostId) === String(currentUserId)
   );
 
   const handleLeave = async () => {

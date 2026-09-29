@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { ArrowLeft, AlertCircle } from 'lucide-react';
 import { useRoom } from '../hooks/useRoom';
@@ -12,6 +12,8 @@ import FileVerification from '../components/video/FileVerification';
 import VideoPlayer from '../components/video/VideoPlayer';
 import SyncIndicator from '../components/video/SyncIndicator';
 import ChatBox from '../components/chat/ChatBox';
+import { useSocket } from '../context/SocketContext';
+import { roomService } from '../services/roomService';
 
 export default function Room() {
   const { roomCode } = useParams();
@@ -26,20 +28,73 @@ export default function Room() {
     updateMetadata,
   } = useRoom(roomCode);
 
+  const { socket } = useSocket();
   const videoPlayerRef = useRef(null);
 
   const [localFile, setLocalFile] = useState(null);
   const [videoUrl, setVideoUrl] = useState(null);
   const [localMetadata, setLocalMetadata] = useState(null);
-  const [hostOnly, setHostOnly] = useState(room?.hostOnlyControls ?? true);
+  // Initialize from DB value once room loads; updated by socket broadcast for all clients
+  const [hostOnly, setHostOnly] = useState(true);
   const [syncStatus, setSyncStatus] = useState('synced');
+  const [togglingControls, setTogglingControls] = useState(false);
 
+  // Sync hostOnly state from DB value when room first loads
+  useEffect(() => {
+    if (room) {
+      setHostOnly(room.hostOnlyControls ?? true);
+    }
+  }, [room?.hostOnlyControls]);
+
+  // Listen for controls_changed broadcast from server so ALL clients update instantly
+  useEffect(() => {
+    if (!socket) return;
+    const handleControlsChanged = ({ hostOnlyControls }) => {
+      setHostOnly(hostOnlyControls);
+    };
+    socket.on('controls_changed', handleControlsChanged);
+    return () => socket.off('controls_changed', handleControlsChanged);
+  }, [socket]);
+
+  const currentUserId = user?.id || user?._id;
   const canControl = isHost || !hostOnly;
+
+  // Persist toggle to server → server broadcasts controls_changed to all clients
+  const handleToggleControls = useCallback(async () => {
+    if (!isHost || togglingControls) return;
+    const prevValue = hostOnly;
+    const newValue = !prevValue;
+    setHostOnly(newValue); // Optimistic UI update for immediate response
+    setTogglingControls(true);
+
+    // Socket emission for instant broadcast across connected clients
+    if (socket) {
+      socket.emit('toggle_controls', {
+        roomCode,
+        hostOnlyControls: newValue,
+      });
+    }
+
+    try {
+      const res = await roomService.toggleControls(roomCode, newValue);
+      if (res && typeof res.hostOnlyControls === 'boolean') {
+        setHostOnly(res.hostOnlyControls);
+      }
+    } catch (err) {
+      console.error('Failed to toggle controls via API', err);
+      // Revert optimistic update only if API fails and socket wasn't connected
+      if (!socket?.connected) {
+        setHostOnly(prevValue);
+      }
+    } finally {
+      setTogglingControls(false);
+    }
+  }, [isHost, hostOnly, roomCode, togglingControls, socket]);
 
   // ─── Sync hook — orchestrates all socket ↔ video event wiring ─────────────
   const { emitPlay, emitPause, emitSeek } = useVideoSync({
     roomCode,
-    userId: user?.id,
+    userId: currentUserId,
     isHost,
     hostOnlyControls: hostOnly,
     videoRef: videoPlayerRef,
@@ -131,7 +186,7 @@ export default function Room() {
           hostName={room.host?.name || 'Host'}
           isHost={isHost}
           hostOnlyControls={hostOnly}
-          onToggleControls={() => setHostOnly(!hostOnly)}
+          onToggleControls={handleToggleControls}
         />
         <div className="self-end sm:self-center">
           <SyncIndicator status={syncStatus} />
@@ -176,7 +231,7 @@ export default function Room() {
             <ParticipantList
               participants={room.participants || []}
               hostId={room.host?._id || room.host}
-              currentUserId={user?.id}
+              currentUserId={currentUserId}
             />
           </div>
 

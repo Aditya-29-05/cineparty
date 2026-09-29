@@ -153,12 +153,13 @@ const VideoPlayer = forwardRef(function VideoPlayer(
           ref={videoRef}
           src={videoUrl}
           playsInline
+          onClick={handlePlayPause}
           onPlay={handlePlay}
           onPause={handlePause}
           onSeeked={handleSeeked}
           onTimeUpdate={handleTimeUpdate}
           onLoadedMetadata={handleLoadedMetadata}
-          className="w-full h-full object-contain"
+          className={`w-full h-full object-contain ${canControl ? 'cursor-pointer' : 'cursor-default'}`}
         />
 
         {/* Autoplay Gate Overlay (Section 17) */}

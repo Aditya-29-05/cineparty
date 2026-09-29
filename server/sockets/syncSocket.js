@@ -106,6 +106,24 @@ export const syncSocket = (io, socket) => {
     }
   });
 
+  // ─── TOGGLE CONTROLS (socket real-time fallback) ───────────────────────────
+  socket.on('toggle_controls', async ({ roomCode, hostOnlyControls }) => {
+    if (!roomCode) return;
+    const code = roomCode.toUpperCase();
+    try {
+      const room = await Room.findOne({ roomCode: code, isActive: true });
+      if (!room) return;
+
+      room.hostOnlyControls = Boolean(hostOnlyControls);
+      await room.save();
+
+      io.to(code).emit('controls_changed', { hostOnlyControls: room.hostOnlyControls });
+      logger.info(`[${code}] controls_changed broadcast -> hostOnlyControls: ${room.hostOnlyControls}`);
+    } catch (err) {
+      logger.error(`toggle_controls socket error: ${err.message}`);
+    }
+  });
+
   // ─── SYNC REQUEST (from a late-joiner to get current state) ───────────────
   socket.on('sync_request', async ({ roomCode }) => {
     if (!roomCode) return;

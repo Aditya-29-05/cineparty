@@ -4,6 +4,7 @@ import {
   getRoom,
   joinRoom,
   setRoomMetadata,
+  toggleControls,
   leaveRoom,
   endRoom,
   getUserRooms,
@@ -17,6 +18,7 @@ router.post('/', protect, createRoom);
 router.get('/:roomCode', getRoom);
 router.post('/:roomCode/join', protect, joinRoom);
 router.patch('/:roomCode/metadata', protect, setRoomMetadata);
+router.patch('/:roomCode/controls', protect, toggleControls);
 router.post('/:roomCode/leave', protect, leaveRoom);
 router.delete('/:roomCode', protect, endRoom);
 

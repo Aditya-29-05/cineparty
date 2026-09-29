@@ -34,7 +34,26 @@ export function useVideoSync({
   const isRemoteAction = useRef(false);
   const heartbeatTimer = useRef(null);
 
+  const hasFileRef = useRef(hasFile);
+  hasFileRef.current = hasFile;
+
   const canEmit = isHost || !hostOnlyControls;
+  const canEmitRef = useRef(canEmit);
+  canEmitRef.current = canEmit;
+
+  const applyRemoteState = useCallback((state) => {
+    if (!videoRef?.current || !state) return;
+    isRemoteAction.current = true;
+    if (state.currentTime !== undefined && !isNaN(state.currentTime)) {
+      videoRef.current.seekTo(state.currentTime);
+    }
+    if (state.isPlaying) {
+      videoRef.current.play().finally(() => onSyncStatus?.('synced'));
+    } else {
+      videoRef.current.pause();
+      onSyncStatus?.('synced');
+    }
+  }, [videoRef, onSyncStatus]);
 
   // ─── JOIN ROOM ─────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -47,7 +66,7 @@ export function useVideoSync({
 
     // On room_joined: apply current server playback state
     const handleRoomJoined = ({ playbackState }) => {
-      if (!videoRef?.current || !hasFile) return;
+      if (!videoRef?.current || !hasFileRef.current) return;
       applyRemoteState(playbackState);
       onSyncStatus?.('synced');
     };
@@ -66,14 +85,14 @@ export function useVideoSync({
       socket.off('reconnect', handleReconnect);
       socket.emit('leave_room', { roomCode, userId });
     };
-  }, [socket, roomCode, userId, hasFile]);
+  }, [socket, roomCode, userId, applyRemoteState, onSyncStatus, videoRef]);
 
   // ─── INCOMING SYNC EVENTS ─────────────────────────────────────────────────
   useEffect(() => {
     if (!socket) return;
 
     const handleRemotePlay = ({ currentTime }) => {
-      if (!videoRef?.current || !hasFile) return;
+      if (!videoRef?.current || !hasFileRef.current) return;
       onSyncStatus?.('syncing');
       isRemoteAction.current = true;
       if (Math.abs(videoRef.current.getCurrentTime() - currentTime) > 0.3) {
@@ -86,7 +105,7 @@ export function useVideoSync({
     };
 
     const handleRemotePause = ({ currentTime }) => {
-      if (!videoRef?.current || !hasFile) return;
+      if (!videoRef?.current || !hasFileRef.current) return;
       onSyncStatus?.('syncing');
       isRemoteAction.current = true;
       if (Math.abs(videoRef.current.getCurrentTime() - currentTime) > 0.3) {
@@ -97,7 +116,7 @@ export function useVideoSync({
     };
 
     const handleRemoteSeek = ({ currentTime }) => {
-      if (!videoRef?.current || !hasFile) return;
+      if (!videoRef?.current || !hasFileRef.current) return;
       onSyncStatus?.('syncing');
       isRemoteAction.current = true;
       videoRef.current.seekTo(currentTime);
@@ -106,7 +125,7 @@ export function useVideoSync({
 
     // Received from server: authoritative state (late-join or drift correction)
     const handleSyncState = ({ isPlaying, currentTime, isDriftCorrection, drift }) => {
-      if (!videoRef?.current || !hasFile) return;
+      if (!videoRef?.current || !hasFileRef.current) return;
 
       if (isDriftCorrection) {
         onSyncStatus?.('drifted');
@@ -136,7 +155,7 @@ export function useVideoSync({
       socket.off('seek', handleRemoteSeek);
       socket.off('sync_state', handleSyncState);
     };
-  }, [socket, videoRef, hasFile]);
+  }, [socket, videoRef, onSyncStatus]);
 
   // ─── HEARTBEAT for drift detection ────────────────────────────────────────
   useEffect(() => {
@@ -161,38 +180,38 @@ export function useVideoSync({
 
   const emitPlay = useCallback(
     (currentTime) => {
-      if (!canEmit || !socket || !roomCode) return;
+      if (!canEmitRef.current || !socket || !roomCode) return;
       if (isRemoteAction.current) {
         isRemoteAction.current = false; // reset flag; don't emit
         return;
       }
       socket.emit('play', { roomCode, currentTime, userId });
     },
-    [socket, roomCode, userId, canEmit]
+    [socket, roomCode, userId]
   );
 
   const emitPause = useCallback(
     (currentTime) => {
-      if (!canEmit || !socket || !roomCode) return;
+      if (!canEmitRef.current || !socket || !roomCode) return;
       if (isRemoteAction.current) {
         isRemoteAction.current = false;
         return;
       }
       socket.emit('pause', { roomCode, currentTime, userId });
     },
-    [socket, roomCode, userId, canEmit]
+    [socket, roomCode, userId]
   );
 
   const emitSeek = useCallback(
     (currentTime) => {
-      if (!canEmit || !socket || !roomCode) return;
+      if (!canEmitRef.current || !socket || !roomCode) return;
       if (isRemoteAction.current) {
         isRemoteAction.current = false;
         return;
       }
       socket.emit('seek', { roomCode, currentTime, userId });
     },
-    [socket, roomCode, userId, canEmit]
+    [socket, roomCode, userId]
   );
 
   return { emitPlay, emitPause, emitSeek };
