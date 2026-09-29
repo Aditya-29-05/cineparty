@@ -7,11 +7,19 @@ import { chatSocket } from './chatSocket.js';
 import { logger } from '../utils/logger.js';
 
 export const initializeSocket = (httpServer) => {
-  const allowedOrigin = process.env.CLIENT_URL || 'http://localhost:3000';
+  const allowedOrigins = process.env.CLIENT_URL
+    ? process.env.CLIENT_URL.split(',').map((u) => u.trim())
+    : ['http://localhost:3000'];
 
   const io = new Server(httpServer, {
     cors: {
-      origin: allowedOrigin,
+      origin: (origin, callback) => {
+        if (!origin || allowedOrigins.includes(origin) || origin.endsWith('.vercel.app')) {
+          callback(null, true);
+        } else {
+          callback(new Error(`Socket CORS blocked for origin: ${origin}`));
+        }
+      },
       methods: ['GET', 'POST'],
       credentials: true,
     },

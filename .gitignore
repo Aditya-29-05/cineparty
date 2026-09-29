@@ -12,6 +12,7 @@ build/
 .env
 .env.*
 !.env.example
+!client/.env.production
 *.env
 server/.env
 client/.env
