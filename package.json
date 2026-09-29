@@ -4,6 +4,7 @@
   "private": true,
   "description": "CineParty - Watch party with zero server video upload",
   "scripts": {
+    "build": "npm run build --prefix client",
     "server": "npm run dev --prefix server",
     "client": "npm run dev --prefix client",
     "dev": "npm run server"
