@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Film, AlertCircle } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
@@ -11,8 +11,14 @@ export default function Register() {
   const [error, setError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const { register } = useAuth();
+  const { register, isAuthenticated } = useAuth();
   const navigate = useNavigate();
+
+  useEffect(() => {
+    if (isAuthenticated) {
+      navigate('/', { replace: true });
+    }
+  }, [isAuthenticated, navigate]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -137,7 +143,10 @@ export default function Register() {
           </div>
 
           {/* Google Sign In */}
-          <GoogleSignInButton onError={(msg) => setError(msg)} />
+          <GoogleSignInButton
+            onSuccess={() => navigate('/', { replace: true })}
+            onError={(msg) => setError(msg)}
+          />
         </div>
 
         {/* Footer Link */}

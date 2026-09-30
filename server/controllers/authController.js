@@ -1,6 +1,7 @@
 import { User } from '../models/User.js';
 import { generateToken } from '../utils/jwt.js';
 import { verifyGoogleIdToken } from '../config/google.js';
+import { logger } from '../utils/logger.js';
 
 // @desc    Register a new user
 // @route   POST /api/auth/register
@@ -128,6 +129,13 @@ export const googleAuth = async (req, res, next) => {
     const payload = await verifyGoogleIdToken(credential);
     const { sub: googleId, email, name, picture } = payload;
 
+    if (!email) {
+      return res.status(400).json({
+        success: false,
+        message: 'Google account did not provide an email address',
+      });
+    }
+
     let user = await User.findOne({
       $or: [{ googleId }, { email: email.toLowerCase() }],
     });
@@ -140,10 +148,13 @@ export const googleAuth = async (req, res, next) => {
       if (!user.avatar && picture) {
         user.avatar = picture;
       }
+      if (user.authProvider !== 'google' && !user.authProvider) {
+        user.authProvider = 'google';
+      }
       await user.save();
     } else {
       user = await User.create({
-        name: name || 'CineParty User',
+        name: name || email.split('@')[0] || 'CineParty User',
         email: email.toLowerCase(),
         googleId,
         avatar: picture,
@@ -153,7 +164,7 @@ export const googleAuth = async (req, res, next) => {
 
     const token = generateToken(user._id);
 
-    res.status(200).json({
+    return res.status(200).json({
       success: true,
       token,
       user: {
@@ -165,7 +176,11 @@ export const googleAuth = async (req, res, next) => {
       },
     });
   } catch (error) {
-    next(error);
+    logger.error(`googleAuth error: ${error.message}`);
+    return res.status(401).json({
+      success: false,
+      message: error.message || 'Google authentication failed',
+    });
   }
 };
 

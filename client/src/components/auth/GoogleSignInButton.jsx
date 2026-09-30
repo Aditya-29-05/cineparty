@@ -1,30 +1,49 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useAuth } from '../../context/AuthContext';
 
-export default function GoogleSignInButton({ onError }) {
+export default function GoogleSignInButton({ onSuccess, onError }) {
   const { googleLogin } = useAuth();
   const buttonRef = useRef(null);
+  const [isLoading, setIsLoading] = useState(false);
   const clientId = import.meta.env.VITE_GOOGLE_CLIENT_ID;
 
   useEffect(() => {
     if (!clientId) return;
 
-    // Load Google Identity Services script if not already present
-    const loadGoogleScript = () => {
-      if (window.google?.accounts?.id) {
-        initializeGoogle();
-        return;
-      }
+    let isMounted = true;
 
-      const script = document.createElement('script');
-      script.src = 'https://accounts.google.com/gsi/client';
-      script.async = true;
-      script.defer = true;
-      script.onload = initializeGoogle;
-      document.body.appendChild(script);
+    const handleGoogleResponse = async (response) => {
+      try {
+        if (!response?.credential) {
+          throw new Error('No credential token received from Google');
+        }
+
+        if (isMounted) setIsLoading(true);
+        if (onError) onError('');
+
+        await googleLogin(response.credential);
+
+        if (onSuccess) {
+          onSuccess();
+        }
+      } catch (err) {
+        const errorMsg =
+          err.response?.data?.message ||
+          err.message ||
+          'Google authentication failed. Please try again.';
+        if (onError) {
+          onError(errorMsg);
+        }
+      } finally {
+        if (isMounted) {
+          setIsLoading(false);
+        }
+      }
     };
 
-    const initializeGoogle = () => {
+    const renderGoogleButton = () => {
+      if (!window.google?.accounts?.id || !buttonRef.current) return;
+
       try {
         window.google.accounts.id.initialize({
           client_id: clientId,
@@ -32,6 +51,7 @@ export default function GoogleSignInButton({ onError }) {
         });
 
         if (buttonRef.current) {
+          buttonRef.current.innerHTML = '';
           window.google.accounts.id.renderButton(buttonRef.current, {
             theme: 'filled_black',
             size: 'large',
@@ -45,20 +65,35 @@ export default function GoogleSignInButton({ onError }) {
       }
     };
 
-    const handleGoogleResponse = async (response) => {
-      try {
-        if (response.credential) {
-          await googleLogin(response.credential);
-        }
-      } catch (err) {
-        if (onError) {
-          onError(err.response?.data?.message || 'Google authentication failed');
-        }
+    // Load Google Identity Services script if not already present
+    if (window.google?.accounts?.id) {
+      renderGoogleButton();
+    } else {
+      let script = document.querySelector('script[src="https://accounts.google.com/gsi/client"]');
+      if (!script) {
+        script = document.createElement('script');
+        script.src = 'https://accounts.google.com/gsi/client';
+        script.async = true;
+        script.defer = true;
+        document.body.appendChild(script);
       }
-    };
 
-    loadGoogleScript();
-  }, [clientId]);
+      const onLoad = () => {
+        if (isMounted) renderGoogleButton();
+      };
+
+      script.addEventListener('load', onLoad);
+
+      return () => {
+        isMounted = false;
+        script.removeEventListener('load', onLoad);
+      };
+    }
+
+    return () => {
+      isMounted = false;
+    };
+  }, [clientId, googleLogin, onSuccess, onError]);
 
   if (!clientId) {
     return (
@@ -94,5 +129,16 @@ export default function GoogleSignInButton({ onError }) {
     );
   }
 
-  return <div ref={buttonRef} className="w-full flex justify-center" />;
+  return (
+    <div className="w-full">
+      {isLoading ? (
+        <div className="w-full flex items-center justify-center gap-2.5 py-2.5 px-4 rounded-lg bg-[#161a25] border border-[#242838] text-sm text-[#9aa2b5]">
+          <div className="w-4 h-4 rounded-full border-2 border-[#2563eb] border-t-transparent animate-spin" />
+          <span className="text-white font-medium">Verifying Google account...</span>
+        </div>
+      ) : (
+        <div ref={buttonRef} className="w-full flex justify-center min-h-[40px]" />
+      )}
+    </div>
+  );
 }
