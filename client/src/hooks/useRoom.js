@@ -18,8 +18,14 @@ export function useRoom(roomCode) {
     try {
       setIsLoading(true);
       setError(null);
-      const res = await roomService.getRoom(roomCode);
-      if (res.success && res.room) {
+      let res;
+      try {
+        res = await roomService.joinRoom(roomCode);
+      } catch (joinErr) {
+        res = await roomService.getRoom(roomCode);
+      }
+
+      if (res && res.success && res.room) {
         setRoom(res.room);
       } else {
         setError('Room not found or no longer active');

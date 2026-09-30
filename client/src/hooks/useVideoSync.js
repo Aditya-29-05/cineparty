@@ -22,6 +22,7 @@ const HEARTBEAT_INTERVAL_MS = 5000;
 export function useVideoSync({
   roomCode,
   userId,
+  user,
   isHost,
   hostOnlyControls,
   videoRef,       // ref to VideoPlayer's imperative handle
@@ -41,6 +42,9 @@ export function useVideoSync({
   const canEmitRef = useRef(canEmit);
   canEmitRef.current = canEmit;
 
+  const userRef = useRef(user);
+  userRef.current = user;
+
   const applyRemoteState = useCallback((state) => {
     if (!videoRef?.current || !state) return;
     isRemoteAction.current = true;
@@ -55,19 +59,26 @@ export function useVideoSync({
     }
   }, [videoRef, onSyncStatus]);
 
+  const applyRemoteStateRef = useRef(applyRemoteState);
+  applyRemoteStateRef.current = applyRemoteState;
+
   // ─── JOIN ROOM ─────────────────────────────────────────────────────────────
   useEffect(() => {
     if (!socket || !roomCode || !userId) return;
 
     socket.emit('join_room', {
       roomCode,
-      user: { id: userId, name: '', avatar: '' }, // minimal user info for presence
+      user: {
+        id: userId,
+        name: userRef.current?.name || '',
+        avatar: userRef.current?.avatar || '',
+      },
     });
 
     // On room_joined: apply current server playback state
     const handleRoomJoined = ({ playbackState }) => {
       if (!videoRef?.current || !hasFileRef.current) return;
-      applyRemoteState(playbackState);
+      applyRemoteStateRef.current(playbackState);
       onSyncStatus?.('synced');
     };
 
@@ -83,9 +94,9 @@ export function useVideoSync({
     return () => {
       socket.off('room_joined', handleRoomJoined);
       socket.off('reconnect', handleReconnect);
-      socket.emit('leave_room', { roomCode, userId });
+      // Room exit is handled cleanly on unmount of Room page, avoiding premature disconnect on control toggles
     };
-  }, [socket, roomCode, userId, applyRemoteState, onSyncStatus, videoRef]);
+  }, [socket, roomCode, userId, onSyncStatus, videoRef]);
 
   // ─── INCOMING SYNC EVENTS ─────────────────────────────────────────────────
   useEffect(() => {

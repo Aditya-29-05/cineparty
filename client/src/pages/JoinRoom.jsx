@@ -22,8 +22,14 @@ export default function JoinRoom() {
 
     try {
       setIsSubmitting(true);
-      const res = await roomService.getRoom(cleanCode);
-      if (res.success && res.room) {
+      let res;
+      try {
+        res = await roomService.joinRoom(cleanCode);
+      } catch (joinErr) {
+        res = await roomService.getRoom(cleanCode);
+      }
+
+      if (res && res.success && res.room) {
         navigate(`/room/${cleanCode}`);
       } else {
         setError('Room not found or no longer active');

@@ -95,12 +95,22 @@ export default function Room() {
   const { emitPlay, emitPause, emitSeek } = useVideoSync({
     roomCode,
     userId: currentUserId,
+    user,
     isHost,
     hostOnlyControls: hostOnly,
     videoRef: videoPlayerRef,
     hasFile: Boolean(videoUrl),
     onSyncStatus: setSyncStatus,
   });
+
+  // Emit leave_room cleanly when user navigates away from Room page
+  useEffect(() => {
+    return () => {
+      if (socket && roomCode && currentUserId) {
+        socket.emit('leave_room', { roomCode, userId: currentUserId });
+      }
+    };
+  }, [socket, roomCode, currentUserId]);
 
 
   const handleFileSelected = ({ file, url, metadata }) => {

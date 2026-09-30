@@ -17,20 +17,35 @@ export const chatSocket = (io, socket) => {
         return;
       }
 
-      // Verify sender is a participant
-      const isParticipant = room.participants.some(
-        (p) => p.user.toString() === userId
+      // Ensure user is registered as a participant if not already present
+      const isHost = room.host.toString() === userId.toString();
+      const existingParticipant = room.participants.find(
+        (p) => p.user.toString() === userId.toString()
       );
-      if (!isParticipant) {
-        socket.emit('chat_error', { message: 'You are not a participant in this room.' });
-        return;
+
+      if (!isHost && !existingParticipant) {
+        room.participants.push({
+          user: userId,
+          name: userName || 'Viewer',
+          avatar: userAvatar || null,
+          socketId: socket.id,
+          isReady: false,
+          fileMatched: false,
+          joinedAt: new Date(),
+        });
+        await room.save();
+      }
+
+      // Ensure this socket has joined the Socket.IO room channel
+      if (!socket.rooms.has(code)) {
+        socket.join(code);
       }
 
       // Persist message
       const savedMessage = await Message.create({
         roomCode: code,
         sender: userId,
-        senderName: userName,
+        senderName: userName || 'Viewer',
         senderAvatar: userAvatar || null,
         text: text.trim().slice(0, 500),
       });

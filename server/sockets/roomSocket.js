@@ -2,7 +2,6 @@ import { Room } from '../models/Room.js';
 import { logger } from '../utils/logger.js';
 
 // In-memory map of roomCode -> Set of socket IDs currently in the room
-// This lets us quickly look up who is in which room
 const roomSockets = new Map();
 
 export const roomSocket = (io, socket) => {
@@ -11,6 +10,8 @@ export const roomSocket = (io, socket) => {
     if (!roomCode || !user) return;
 
     const code = roomCode.toUpperCase();
+    const userId = (user.id || user._id)?.toString();
+    if (!userId) return;
 
     try {
       const room = await Room.findOne({ roomCode: code, isActive: true })
@@ -24,8 +25,8 @@ export const roomSocket = (io, socket) => {
       // Join Socket.IO room
       socket.join(code);
       socket.roomCode = code;
-      socket.userId = user.id;
-      socket.userName = user.name;
+      socket.userId = userId;
+      socket.userName = user.name || 'Viewer';
 
       // Track this socket in the roomSockets map
       if (!roomSockets.has(code)) {
@@ -33,13 +34,29 @@ export const roomSocket = (io, socket) => {
       }
       roomSockets.get(code).add(socket.id);
 
-      // Update participant socketId in DB
-      await Room.updateOne(
-        { roomCode: code, 'participants.user': user.id },
-        { $set: { 'participants.$.socketId': socket.id } }
+      // Add or update participant in DB
+      const participantIndex = room.participants.findIndex(
+        (p) => p.user.toString() === userId
       );
 
-      logger.info(`Socket ${socket.id} (${user.name}) joined room ${code}`);
+      if (participantIndex !== -1) {
+        room.participants[participantIndex].socketId = socket.id;
+        if (user.name) room.participants[participantIndex].name = user.name;
+        if (user.avatar) room.participants[participantIndex].avatar = user.avatar;
+      } else {
+        room.participants.push({
+          user: userId,
+          name: user.name || 'Viewer',
+          avatar: user.avatar || null,
+          socketId: socket.id,
+          isReady: false,
+          fileMatched: false,
+          joinedAt: new Date(),
+        });
+      }
+      await room.save();
+
+      logger.info(`Socket ${socket.id} (${user.name || 'Viewer'}) joined room ${code}`);
 
       // Build current participant list from DB
       const updatedRoom = await Room.findOne({ roomCode: code, isActive: true })
@@ -47,7 +64,7 @@ export const roomSocket = (io, socket) => {
 
       // Notify all others in the room
       socket.to(code).emit('user_joined', {
-        user: { id: user.id, name: user.name, avatar: user.avatar },
+        user: { id: userId, name: user.name || 'Viewer', avatar: user.avatar || null },
         participants: updatedRoom?.participants || [],
       });
 
@@ -93,10 +110,12 @@ async function handleLeave(io, socket, code, userId) {
     }
 
     // Clear socketId in DB for this participant
-    await Room.updateOne(
-      { roomCode: code, 'participants.user': userId },
-      { $set: { 'participants.$.socketId': null } }
-    );
+    if (userId) {
+      await Room.updateOne(
+        { roomCode: code, 'participants.user': userId },
+        { $set: { 'participants.$.socketId': null } }
+      );
+    }
 
     const updatedRoom = await Room.findOne({ roomCode: code, isActive: true });
 

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { MessageSquare } from 'lucide-react';
+import { MessageSquare, AlertCircle } from 'lucide-react';
 import { useSocket } from '../../context/SocketContext';
 import { useAuth } from '../../context/AuthContext';
 import MessageList from './MessageList';
@@ -10,7 +10,10 @@ export default function ChatBox({ roomCode }) {
   const { user } = useAuth();
 
   const [messages, setMessages] = useState([]);
+  const [chatError, setChatError] = useState('');
   const listRef = useRef(null);
+
+  const currentUserId = user?.id || user?._id;
 
   // Auto-scroll to bottom when new messages arrive
   const scrollToBottom = useCallback(() => {
@@ -27,7 +30,7 @@ export default function ChatBox({ roomCode }) {
   useEffect(() => {
     if (!socket || !roomCode) return;
 
-    // Fetch existing message history when component mounts
+    // Fetch existing message history when component mounts or reconnects
     socket.emit('fetch_messages', { roomCode, limit: 50 });
 
     const handleHistory = (history) => {
@@ -42,10 +45,13 @@ export default function ChatBox({ roomCode }) {
         }
         return [...prev, message];
       });
+      setChatError('');
     };
 
     const handleChatError = ({ message: errMsg }) => {
       console.error('Chat error:', errMsg);
+      setChatError(errMsg || 'Could not send message.');
+      setTimeout(() => setChatError(''), 4000);
     };
 
     socket.on('message_history', handleHistory);
@@ -61,13 +67,13 @@ export default function ChatBox({ roomCode }) {
 
   // ─── Send message ──────────────────────────────────────────────────────────
   const handleSend = (text) => {
-    if (!socket || !user || !roomCode) return;
+    if (!socket || !user || !roomCode || !currentUserId) return;
 
     socket.emit('send_message', {
       roomCode,
       text,
-      userId: user.id,
-      userName: user.name,
+      userId: currentUserId,
+      userName: user.name || 'User',
       userAvatar: user.avatar || null,
     });
   };
@@ -82,11 +88,19 @@ export default function ChatBox({ roomCode }) {
         </h2>
       </div>
 
+      {/* Error Notice */}
+      {chatError && (
+        <div className="mx-4 mt-2 p-2 rounded bg-red-950/40 border border-red-800/60 flex items-center gap-2 text-xs text-red-300">
+          <AlertCircle className="w-3.5 h-3.5 shrink-0 text-red-400" />
+          <span>{chatError}</span>
+        </div>
+      )}
+
       {/* Messages */}
       <div className="flex-1 flex flex-col min-h-0 px-4 overflow-hidden">
         <MessageList
           messages={messages}
-          currentUserId={user?.id}
+          currentUserId={currentUserId}
           listRef={listRef}
         />
       </div>
